@@ -21,8 +21,7 @@ router.get('/', [
         .from('avaliacoes_estadios')
         .select(`
             *,
-            usuarios:usuario_id (id, nome, email),
-            likes:likes_avaliacoes(count)
+            usuarios!usuario_id (id, nome, email)
         `, { count: 'exact' })
         .order('data_avaliacao', { ascending: false })
         .range(offset, offset + limit - 1)
