@@ -60,9 +60,14 @@ app.use((err, req, res, next) => {
     })
 })
 
-// Iniciar servidor
-app.listen(PORT, () => {
-    console.log(`🚀 Servidor rodando em http://localhost:${PORT}`)
-    console.log(`📝 API Docs: http://localhost:${PORT}/api/`)
-    console.log(`✅ Ambiente: ${process.env.NODE_ENV || 'development'}`)
-})
+// Iniciar servidor apenas em ambiente local.
+// Na Vercel o app é importado como função serverless e não deve chamar listen().
+if (process.env.VERCEL !== '1') {
+    app.listen(PORT, () => {
+        console.log(`🚀 Servidor rodando em http://localhost:${PORT}`)
+        console.log(`📝 API Docs: http://localhost:${PORT}/api/`)
+        console.log(`✅ Ambiente: ${process.env.NODE_ENV || 'development'}`)
+    })
+}
+
+export default app
