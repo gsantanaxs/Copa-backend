@@ -3,6 +3,10 @@
   "name": "fifa2026-guide",
   "builds": [
     {
+      "src": "server.js",
+      "use": "@vercel/node"
+    },
+    {
       "src": "frontend/**/*.html",
       "use": "@vercel/static"
     },
@@ -20,6 +24,14 @@
     }
   ],
   "routes": [
+    {
+      "src": "/api/(.*)",
+      "dest": "/server.js"
+    },
+    {
+      "src": "/health",
+      "dest": "/server.js"
+    },
     {
       "src": "/",
       "dest": "/frontend/index.html"
