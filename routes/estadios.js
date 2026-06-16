@@ -6,7 +6,7 @@ import { body, query, validationResult } from 'express-validator'
 const router = express.Router()
 
 // ============================================
-// GET - Listar avaliações de estádios
+// GET - Listar avaliações de estádios (usando VIEW)
 // ============================================
 router.get('/', [
     query('page').optional().isInt({ min: 1 }),
@@ -20,14 +20,13 @@ router.get('/', [
         const limit = parseInt(req.query.limit) || 10
         const offset = (page - 1) * limit
         
-        // 🔧 SIMPLES: Buscar apenas da tabela, sem JOIN
+        // 🟢 USANDO A VIEW
         let query = supabase
-            .from('avaliacoes_estadios')
+            .from('avaliacoes_estadios_view')
             .select('*', { count: 'exact' })
             .order('data_avaliacao', { ascending: false })
             .range(offset, offset + limit - 1)
         
-        // Aplicar filtros
         if (req.query.cidade) {
             query = query.ilike('cidade', `%${req.query.cidade}%`)
         }
@@ -47,12 +46,23 @@ router.get('/', [
             return res.status(500).json({ error: error.message })
         }
         
-        // Formatar dados (sem informações do usuário)
+        // Formatar dados
         const formattedData = data.map(item => ({
-            ...item,
+            id: item.id,
+            usuario_id: item.usuario_id,
+            estadio_nome: item.estadio_nome,
+            cidade: item.cidade,
+            nota_geral: item.nota_geral,
+            nota_acesso: item.nota_acesso,
+            nota_seguranca: item.nota_seguranca,
+            nota_estrutura: item.nota_estrutura,
+            comentario: item.comentario,
+            data_avaliacao: item.data_avaliacao,
+            created_at: item.created_at,
             usuarios: {
-                nome: 'Torcedor',
-                email: 'torcedor@copa2026.com'
+                id: item.usuario_id,
+                email: item.usuario_email,
+                nome: item.usuario_nome || 'Torcedor'
             }
         }))
         
@@ -81,7 +91,7 @@ router.get('/:id', async (req, res) => {
         const { id } = req.params
         
         const { data, error } = await supabase
-            .from('avaliacoes_estadios')
+            .from('avaliacoes_estadios_view')
             .select('*')
             .eq('id', id)
             .single()
@@ -90,7 +100,17 @@ router.get('/:id', async (req, res) => {
             return res.status(404).json({ error: 'Avaliação não encontrada' })
         }
         
-        res.json({ success: true, data })
+        // Formatar dados
+        const formattedData = {
+            ...data,
+            usuarios: {
+                id: data.usuario_id,
+                email: data.usuario_email,
+                nome: data.usuario_nome || 'Torcedor'
+            }
+        }
+        
+        res.json({ success: true, data: formattedData })
         
     } catch (error) {
         console.error('Erro ao buscar avaliação:', error)
@@ -104,7 +124,7 @@ router.get('/:id', async (req, res) => {
 router.post('/', verificarToken, [
     body('estadio_nome').notEmpty().withMessage('Nome do estádio é obrigatório').trim(),
     body('cidade').notEmpty().withMessage('Cidade é obrigatória').trim(),
-    body('nota_geral').isInt({ min: 1, max: 5 }).withMessage('Nota geral deve ser entre 1 e 5'),
+    body('nota_geral').isInt({ min: 1, max: 5 }),
     body('nota_acesso').isInt({ min: 1, max: 5 }),
     body('nota_seguranca').isInt({ min: 1, max: 5 }),
     body('nota_estrutura').isInt({ min: 1, max: 5 }),
@@ -154,13 +174,13 @@ router.put('/:id', verificarToken, async (req, res) => {
     try {
         const { id } = req.params
         
-        const { data: avaliacaoExistente, error: findError } = await supabase
+        const { data: avaliacaoExistente } = await supabase
             .from('avaliacoes_estadios')
             .select('usuario_id')
             .eq('id', id)
             .single()
         
-        if (findError || !avaliacaoExistente) {
+        if (!avaliacaoExistente) {
             return res.status(404).json({ error: 'Avaliação não encontrada' })
         }
         
