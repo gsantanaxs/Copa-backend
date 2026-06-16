@@ -1,5 +1,5 @@
 import express from 'express'
-import { supabase } from '../supabase/client.js'
+import { supabase, supabaseAdmin } from '../supabase/client.js'
 import { body, validationResult } from 'express-validator'
 
 const router = express.Router()
@@ -30,8 +30,11 @@ router.post('/registrar', [
         
         if (authError) throw authError
         
-        // Criar perfil na tabela usuarios
-        const { error: perfilError } = await supabase
+        // Criar perfil na tabela usuarios usando o client admin (service role).
+        // Importante: se a confirmação de e-mail estiver ativa no projeto,
+        // o signUp não retorna sessão, então o client anônimo não está
+        // autenticado nesse momento e um insert protegido por RLS falharia.
+        const { error: perfilError } = await supabaseAdmin
             .from('usuarios')
             .insert([
                 { 
@@ -105,7 +108,8 @@ router.post('/logout', async (req, res) => {
     const token = req.headers.authorization?.split(' ')[1]
     
     if (token) {
-        await supabase.auth.admin.signOut(token)
+        // admin.signOut exige privilégios de service role
+        await supabaseAdmin.auth.admin.signOut(token)
     }
     
     res.json({ success: true, message: 'Logout realizado' })
