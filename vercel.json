@@ -3,7 +3,7 @@
   "name": "fifa2026-guide",
   "builds": [
     {
-      "src": "server.js",
+      "src": "backend/server.js",
       "use": "@vercel/node"
     },
     {
@@ -26,11 +26,11 @@
   "routes": [
     {
       "src": "/api/(.*)",
-      "dest": "/server.js"
+      "dest": "/backend/server.js"
     },
     {
       "src": "/health",
-      "dest": "/server.js"
+      "dest": "/backend/server.js"
     },
     {
       "src": "/",
@@ -67,21 +67,6 @@
     {
       "src": "/(.*)",
       "dest": "/frontend/$1"
-    }
-  ],
-  "headers": [
-    {
-      "source": "/(.*)",
-      "headers": [
-        {
-          "key": "X-Content-Type-Options",
-          "value": "nosniff"
-        },
-        {
-          "key": "X-Frame-Options",
-          "value": "DENY"
-        }
-      ]
     }
   ]
 }
