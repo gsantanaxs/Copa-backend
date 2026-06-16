@@ -5,7 +5,9 @@ import { body, query, validationResult } from 'express-validator'
 
 const router = express.Router()
 
+// ============================================
 // GET - Listar avaliações de estádios (com filtros e paginação)
+// ============================================
 router.get('/', [
     query('page').optional().isInt({ min: 1 }),
     query('limit').optional().isInt({ min: 1, max: 50 }),
@@ -17,11 +19,12 @@ router.get('/', [
     const limit = parseInt(req.query.limit) || 10
     const offset = (page - 1) * limit
     
+    // 🔧 CORREÇÃO AQUI - Usando auth.users diretamente
     let query = supabase
         .from('avaliacoes_estadios')
         .select(`
             *,
-            usuarios!usuario_id (id, nome, email)
+            auth.users!usuario_id (id, email, raw_user_meta_data)
         `, { count: 'exact' })
         .order('data_avaliacao', { ascending: false })
         .range(offset, offset + limit - 1)
@@ -45,8 +48,18 @@ router.get('/', [
         return res.status(500).json({ error: error.message })
     }
     
+    // Formatar os dados para o frontend
+    const formattedData = data.map(item => ({
+        ...item,
+        usuarios: item['auth.users'] ? {
+            id: item['auth.users'].id,
+            email: item['auth.users'].email,
+            nome: item['auth.users'].raw_user_meta_data?.nome_completo || item['auth.users'].email?.split('@')[0] || 'Anônimo'
+        } : null
+    }))
+    
     res.json({
-        data,
+        data: formattedData,
         pagination: {
             page,
             limit,
@@ -56,7 +69,41 @@ router.get('/', [
     })
 })
 
+// ============================================
+// GET - Buscar uma avaliação por ID
+// ============================================
+router.get('/:id', async (req, res) => {
+    const { id } = req.params
+    
+    const { data, error } = await supabase
+        .from('avaliacoes_estadios')
+        .select(`
+            *,
+            auth.users!usuario_id (id, email, raw_user_meta_data)
+        `)
+        .eq('id', id)
+        .single()
+    
+    if (error) {
+        return res.status(404).json({ error: 'Avaliação não encontrada' })
+    }
+    
+    // Formatar dados
+    const formattedData = {
+        ...data,
+        usuarios: data['auth.users'] ? {
+            id: data['auth.users'].id,
+            email: data['auth.users'].email,
+            nome: data['auth.users'].raw_user_meta_data?.nome_completo || data['auth.users'].email?.split('@')[0]
+        } : null
+    }
+    
+    res.json({ success: true, data: formattedData })
+})
+
+// ============================================
 // GET - Estatísticas por cidade
+// ============================================
 router.get('/estatisticas', async (req, res) => {
     const { data, error } = await supabase
         .from('avaliacoes_estadios')
@@ -94,14 +141,16 @@ router.get('/estatisticas', async (req, res) => {
     res.json(resultado)
 })
 
+// ============================================
 // POST - Criar nova avaliação (requer autenticação)
+// ============================================
 router.post('/', verificarToken, [
-    body('estadio_nome').notEmpty().trim(),
-    body('cidade').notEmpty().trim(),
-    body('nota_geral').isInt({ min: 1, max: 5 }),
-    body('nota_acesso').isInt({ min: 1, max: 5 }),
-    body('nota_seguranca').isInt({ min: 1, max: 5 }),
-    body('nota_estrutura').isInt({ min: 1, max: 5 }),
+    body('estadio_nome').notEmpty().withMessage('Nome do estádio é obrigatório').trim(),
+    body('cidade').notEmpty().withMessage('Cidade é obrigatória').trim(),
+    body('nota_geral').isInt({ min: 1, max: 5 }).withMessage('Nota geral deve ser entre 1 e 5'),
+    body('nota_acesso').isInt({ min: 1, max: 5 }).withMessage('Nota de acesso deve ser entre 1 e 5'),
+    body('nota_seguranca').isInt({ min: 1, max: 5 }).withMessage('Nota de segurança deve ser entre 1 e 5'),
+    body('nota_estrutura').isInt({ min: 1, max: 5 }).withMessage('Nota de estrutura deve ser entre 1 e 5'),
     body('comentario').optional().trim()
 ], async (req, res) => {
     const errors = validationResult(req)
@@ -125,11 +174,12 @@ router.post('/', verificarToken, [
         return res.status(500).json({ error: error.message })
     }
     
-    // Disparar evento Realtime (já é automático no Supabase)
     res.status(201).json({ success: true, data })
 })
 
+// ============================================
 // PUT - Atualizar avaliação (apenas dono)
+// ============================================
 router.put('/:id', verificarToken, async (req, res) => {
     const { id } = req.params
     
@@ -158,7 +208,9 @@ router.put('/:id', verificarToken, async (req, res) => {
     res.json({ success: true, data })
 })
 
+// ============================================
 // DELETE - Remover avaliação (apenas dono ou admin)
+// ============================================
 router.delete('/:id', verificarToken, async (req, res) => {
     const { id } = req.params
     
@@ -173,8 +225,8 @@ router.delete('/:id', verificarToken, async (req, res) => {
         return res.status(404).json({ error: 'Avaliação não encontrada' })
     }
     
-    // Verificar se é admin (você pode implementar isso)
-    const isAdmin = req.usuario.email?.includes('admin') // Exemplo simples
+    // Verificar se é admin
+    const isAdmin = req.usuario.email?.includes('admin') || req.usuario.email?.includes('@admin')
     
     if (avaliacaoExistente.usuario_id !== req.usuario.id && !isAdmin) {
         return res.status(403).json({ error: 'Sem permissão para deletar' })
@@ -192,7 +244,9 @@ router.delete('/:id', verificarToken, async (req, res) => {
     res.json({ success: true, message: 'Avaliação removida' })
 })
 
+// ============================================
 // GET - Ranking dos melhores estádios
+// ============================================
 router.get('/ranking', async (req, res) => {
     const { data, error } = await supabase
         .from('avaliacoes_estadios')
@@ -224,7 +278,7 @@ router.get('/ranking', async (req, res) => {
             media: (item.totalNotas / item.quantidade).toFixed(1)
         }))
         .sort((a, b) => b.media - a.media)
-        .slice(0, 10) // Top 10
+        .slice(0, 10)
     
     res.json(resultado)
 })
