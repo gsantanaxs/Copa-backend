@@ -17,29 +17,27 @@ const app = express()
 const PORT = process.env.PORT || 3000
 
 // Middlewares globais
-app.use(helmet())
-app.use(cors())
-app.use(express.json())
-app.use(express.urlencoded({ extended: true }))
+app.use(helmet()) // Segurança
+app.use(cors()) // CORS
+app.use(express.json()) // Parse JSON
+app.use(express.urlencoded({ extended: true })) // Parse URL encoded
 
 // Rate limiting
 const limiter = rateLimit({
-    windowMs: 15 * 60 * 1000,
-    max: 100,
+    windowMs: 15 * 60 * 1000, // 15 minutos
+    max: 100, // Limite de 100 requisições por IP
     message: 'Muitas requisições, tente novamente mais tarde'
 })
 app.use('/api/', limiter)
 
-// ============================================
-// ROTAS DA API
-// ============================================
+// Rotas da API
 app.use('/api/auth', authRoutes)
 app.use('/api/estadios', estadiosRoutes)
 app.use('/api/transportes', transportesRoutes)
 app.use('/api/restaurantes', restaurantesRoutes)
 app.use('/api/likes', likesRoutes)
 
-// Health check
+// Rota de health check
 app.get('/health', (req, res) => {
     res.json({ 
         status: 'OK', 
@@ -48,50 +46,28 @@ app.get('/health', (req, res) => {
     })
 })
 
-// Rota raiz da API
-app.get('/api', (req, res) => {
-    res.json({
-        message: 'FIFA 2026 Guide API',
-        endpoints: {
-            auth: '/api/auth',
-            estadios: '/api/estadios',
-            transportes: '/api/transportes',
-            restaurantes: '/api/restaurantes',
-            likes: '/api/likes',
-            health: '/health'
-        }
-    })
-})
-
 // Middleware para rotas não encontradas
 app.use((req, res) => {
-    res.status(404).json({ 
-        success: false,
-        error: `Rota '${req.method} ${req.url}' não encontrada` 
-    })
+    res.status(404).json({ error: 'Rota não encontrada' })
 })
 
-// Middleware de erro
+// Middleware de erro global
 app.use((err, req, res, next) => {
     console.error('Erro:', err)
     res.status(500).json({ 
-        success: false,
         error: 'Erro interno do servidor',
         message: process.env.NODE_ENV === 'development' ? err.message : undefined
     })
 })
 
-// ============================================
-// EXPORTAR PARA VERCEL (SERVERLESS)
-// ============================================
-// 🔧 CORREÇÃO: Exportar app diretamente para a Vercel
-export default app
-
-// Iniciar servidor apenas se NÃO estiver na Vercel
-if (!process.env.VERCEL) {
+// Iniciar servidor apenas em ambiente local.
+// Na Vercel o app é importado como função serverless e não deve chamar listen().
+if (process.env.VERCEL !== '1') {
     app.listen(PORT, () => {
         console.log(`🚀 Servidor rodando em http://localhost:${PORT}`)
         console.log(`📝 API Docs: http://localhost:${PORT}/api/`)
         console.log(`✅ Ambiente: ${process.env.NODE_ENV || 'development'}`)
     })
 }
+
+export default app
